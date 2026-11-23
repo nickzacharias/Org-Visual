@@ -15,7 +15,24 @@ html,body{height:100%;margin:0}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--bd);flex-wrap:wrap}
-header h1{font-size:16px;font-weight:600;margin:0;margin-right:auto}
+header h1{font-size:16px;font-weight:600;margin:0}
+[hidden]{display:none!important}
+.tabs{display:flex;gap:4px}
+.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+#tv{flex:1;min-height:0;overflow:auto;padding:16px 24px}
+.tbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.tbar label{display:inline;margin:0}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;align-items:start}
+.tp{background:var(--panel);border:1px solid var(--bd);border-top:4px solid var(--c);border-radius:8px;padding:12px 14px;break-inside:avoid}
+.tp h3{margin:0;font-size:14px;font-weight:600}
+.tp .ct{color:var(--mute);font-size:12px;margin-bottom:8px}
+.tp ul{list-style:none;margin:0;padding-left:14px;border-left:1px solid var(--line)}
+.tp>ul{padding-left:0;border-left:0}
+.tp li{margin:2px 0}
+.mb{display:block;width:100%;text-align:left;border:0;background:none;padding:4px 6px;border-radius:6px;font:inherit;color:var(--ink);cursor:pointer}
+.mb:hover{background:var(--bg)}
+.mb small{display:block;color:var(--mute);font-size:12px}
+.mb.vac b{font-style:italic;font-weight:400;color:var(--mute)}
 main{flex:1;display:flex;min-height:0}
 aside{width:260px;background:var(--panel);border-right:1px solid var(--bd);padding:16px;overflow:auto;flex-shrink:0}
 aside h2{font-size:14px;margin:0 0 12px;font-weight:600}
@@ -53,7 +70,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .card .tg:hover{border-color:var(--ink);color:var(--ink)}
 .zoom{display:flex;gap:4px;align-items:center}
 @page{size:landscape;margin:10mm}
-@media print{header,aside{display:none}body{display:block;height:auto;background:#fff}main{display:block}.canvas{overflow:visible;padding:0}}
+@media print{#tv{overflow:visible;padding:0}.tbar{display:none}header,aside{display:none}body{display:block;height:auto;background:#fff}main{display:block}.canvas{overflow:visible;padding:0}}
 @media (max-width:700px){main{flex-direction:column-reverse}aside{width:100%;border-right:0;border-top:1px solid var(--bd);max-height:42%}}
 @media (prefers-reduced-motion:no-preference){.tree{transition:transform .15s}}
 </style>
@@ -61,10 +78,11 @@ button:disabled{opacity:.4;cursor:not-allowed}
 <body>
 <header>
   <h1>Org chart builder</h1>
-  <select id="lv" aria-label="Levels shown" style="width:auto"><option value="-1" hidden disabled>Custom view</option><option value="1">Top level only</option><option value="2">Top 2 levels</option><option value="3">Top 3 levels</option><option value="4">Top 4 levels</option><option value="0">All levels</option></select><button id="ft">Fit to screen</button><button id="pr">Print</button>
-  <div class="zoom"><button id="zo" aria-label="Zoom out">−</button><span id="zl">100%</span><button id="zi" aria-label="Zoom in">+</button></div>
+  <div class="tabs"><button id="tabchart" class="on" aria-pressed="true">Org chart</button><button id="tabteams" aria-pressed="false">Teams</button></div>
+  <div id="ctl" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-left:auto"><select id="lv" aria-label="Levels shown" style="width:auto"><option value="-1" hidden disabled>Custom view</option><option value="1">Top level only</option><option value="2">Top 2 levels</option><option value="3">Top 3 levels</option><option value="4">Top 4 levels</option><option value="0">All levels</option></select><button id="ft">Fit to screen</button><button id="pr">Print</button>
+  <div class="zoom"><button id="zo" aria-label="Zoom out">−</button><span id="zl">100%</span><button id="zi" aria-label="Zoom in">+</button></div></div>
 </header>
-<main>
+<main id="mn">
   <aside>
     <h2 id="ph">Selected person</h2>
     <label for="nm">Name</label><input id="nm" autocomplete="off">
@@ -91,6 +109,10 @@ button:disabled{opacity:.4;cursor:not-allowed}
   </aside>
   <div class="canvas" id="cv"><div id="sz"><div class="tree" id="tree"></div></div></div>
 </main>
+<section id="tv" hidden>
+  <div class="tbar"><label for="gb">Group by</label><select id="gb" style="width:auto"></select><input id="ts" type="search" placeholder="Find a team or person" aria-label="Find a team or person" style="max-width:260px"><span class="hint" id="tsum" style="margin:0"></span><button id="tp" style="margin-left:auto">Print</button></div>
+  <div class="tgrid" id="tg"></div>
+</section>
 <script>
 var nid=1,sel=1,zoom=1;
 var SG=["","Leadership","Product","Engineering","Operations"];
@@ -234,7 +256,7 @@ function adopt(data){
   if(!r)return false;
   root=r;sel=root.id;
   cols=Array.isArray(data.cols)?data.cols.map(function(c){return String(c).slice(0,80)}).slice(0,40):[];
-  cb=typeof data.cb==="string"?data.cb:"";refreshCB();return true}
+  cb=typeof data.cb==="string"?data.cb:"";gby=null;refreshCB();return true}
 function persist(){
   try{localStorage.setItem(KEY,JSON.stringify({root:root,cols:cols,cb:cb}));smsg.textContent="Changes are saved automatically in this browser."}
   catch(e){smsg.textContent="This browser is blocking auto-save. Use Save as file to keep your work."}}
@@ -266,6 +288,43 @@ tgb.onclick=function(){toggle(sel)};
 lv.onchange=function(){if(lv.value==="-1")return;setLevels(+lv.value);if(!visible(root,sel))sel=root.id;draw();load();persist();fit()};
 document.getElementById("ft").onclick=fit;
 document.getElementById("pr").onclick=function(){window.print()};
+var gby=null;
+function gval(n){var v=gby?(n.x&&n.x[gby]):n.team;return v||"(none)"}
+function setView(v){
+  document.getElementById("mn").hidden=v!=="chart";document.getElementById("tv").hidden=v!=="teams";document.getElementById("ctl").hidden=v!=="chart";
+  [["tabchart","chart"],["tabteams","teams"]].forEach(function(p){var b=document.getElementById(p[0]);b.classList.toggle("on",v===p[1]);b.setAttribute("aria-pressed",v===p[1]?"true":"false")})}
+function refreshGB(){
+  var g=document.getElementById("gb");
+  if(gby===null||(gby&&cols.indexOf(gby)<0))gby=cols.indexOf("Team")>=0?"Team":"";
+  g.innerHTML='<option value="">Card colour group</option>'+cols.map(function(c){return '<option>'+esc(c)+'</option>'}).join("");g.value=gby}
+function renderTeams(){
+  var all=[],q=document.getElementById("ts").value.trim().toLowerCase(),gs={},order=[],people=0,vac=0;
+  (function w(n,p){all.push({n:n,p:p});n.kids.forEach(function(k){w(k,n)})})(root,null);
+  all.forEach(function(e){var g=gval(e.n);if(!gs[g]){gs[g]=[];order.push(g)}gs[g].push(e);if(e.n.vac)vac++;else people++});
+  order.sort(function(a,b){return gs[b].length-gs[a].length||a.localeCompare(b)});
+  var shown=0,out=order.map(function(g,i){
+    var m=gs[g];
+    if(q&&g.toLowerCase().indexOf(q)<0&&!m.some(function(e){return (e.n.name+" "+e.n.title).toLowerCase().indexOf(q)>=0}))return "";
+    shown++;
+    var v=m.filter(function(e){return e.n.vac}).length;
+    function li(e,top){
+      var n=e.n,kids=m.filter(function(x){return x.p===n}),sub=(n.title||"");
+      if(top&&e.p)sub+=(sub?" \u00b7 ":"")+"reports to "+e.p.name+(gval(e.p)!==g?" ("+gval(e.p)+")":"");
+      return '<li><button class="mb'+(n.vac?' vac':'')+'" data-id="'+n.id+'"><b>'+esc(n.name||"Unnamed")+'</b><small>'+esc(sub)+'</small></button>'+(kids.length?'<ul>'+kids.map(function(k){return li(k,false)}).join("")+'</ul>':'')+'</li>'}
+    var tops=m.filter(function(e){return !e.p||gval(e.p)!==g});
+    return '<div class="tp" style="--c:var(--g'+(i%10)+')"><h3>'+esc(g)+'</h3><div class="ct">'+(m.length-v)+(m.length-v===1?" person":" people")+(v?" \u00b7 "+v+" vacant":"")+'</div><ul>'+tops.map(function(e){return li(e,true)}).join("")+'</ul></div>'}).join("");
+  document.getElementById("tg").innerHTML=out||'<p class="hint">No teams match.</p>';
+  document.getElementById("tsum").textContent=shown+" of "+order.length+" groups \u00b7 "+people+" people"+(vac?" \u00b7 "+vac+" vacancies":"")}
+function goTo(id){
+  var r=find(root,id);while(r&&r.p){r.p.c=false;r=find(root,r.p.id)}
+  sel=id;lv.value="-1";setView("chart");draw();load();persist();fit();
+  var c=document.getElementById("tree").querySelector('.card[data-id="'+id+'"]');if(c&&c.scrollIntoView)c.scrollIntoView({block:"center",inline:"center"})}
+document.getElementById("tabchart").onclick=function(){setView("chart");fit()};
+document.getElementById("tabteams").onclick=function(){setView("teams");refreshGB();renderTeams()};
+document.getElementById("gb").onchange=function(){gby=this.value;renderTeams()};
+document.getElementById("ts").oninput=renderTeams;
+document.getElementById("tp").onclick=function(){window.print()};
+document.getElementById("tg").addEventListener("click",function(e){var b=e.target.closest(".mb");if(b)goTo(+b.dataset.id)});
 draw();load();fit();
 </script>
 </body>
