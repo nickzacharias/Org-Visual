@@ -29,7 +29,8 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
 .hint{color:var(--mute);font-size:12px;margin-top:16px}
 .canvas{flex:1;overflow:auto;padding:32px 24px}
-.tree{transform-origin:top left;width:max-content;min-width:100%}
+.tree{transform-origin:top left;width:max-content}
+#sz{margin:0 auto}
 .tree ul{list-style:none;margin:0;padding:24px 0 0;display:flex;justify-content:center;position:relative}
 .tree>ul{padding-top:0}
 .tree li{position:relative;padding:24px 8px 0;text-align:center}
@@ -48,8 +49,11 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .card.sel{outline:2px solid var(--sel);outline-offset:2px}
 .card b{display:block;font-weight:600}
 .card span{display:block;color:var(--mute);font-size:12px}
-.card i{position:absolute;right:8px;top:8px;font-style:normal;font-size:11px;color:var(--mute)}
+.card .tg{position:absolute;left:50%;bottom:-11px;transform:translateX(-50%);min-width:24px;height:20px;padding:0 7px;border-radius:10px;background:var(--panel);border:1px solid var(--bd);color:var(--mute);font-size:11px;line-height:18px;text-align:center;z-index:1}
+.card .tg:hover{border-color:var(--ink);color:var(--ink)}
 .zoom{display:flex;gap:4px;align-items:center}
+@page{size:landscape;margin:10mm}
+@media print{header,aside{display:none}body{display:block;height:auto;background:#fff}main{display:block}.canvas{overflow:visible;padding:0}}
 @media (max-width:700px){main{flex-direction:column-reverse}aside{width:100%;border-right:0;border-top:1px solid var(--bd);max-height:42%}}
 @media (prefers-reduced-motion:no-preference){.tree{transition:transform .15s}}
 </style>
@@ -57,6 +61,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 <body>
 <header>
   <h1>Org chart builder</h1>
+  <select id="lv" aria-label="Levels shown" style="width:auto"><option value="-1" hidden disabled>Custom view</option><option value="1">Top level only</option><option value="2">Top 2 levels</option><option value="3">Top 3 levels</option><option value="4">Top 4 levels</option><option value="0">All levels</option></select><button id="ft">Fit to screen</button><button id="pr">Print</button>
   <div class="zoom"><button id="zo" aria-label="Zoom out">−</button><span id="zl">100%</span><button id="zi" aria-label="Zoom in">+</button></div>
 </header>
 <main>
@@ -69,6 +74,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
     <label style="display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px"><input type="checkbox" id="vc" style="width:auto"> Vacant position</label>
     <div class="row">
       <button class="primary" id="add">Add report</button>
+      <button id="tgb">Collapse reports</button>
       <button class="danger" id="del">Delete</button>
     </div>
     <h2 style="margin-top:28px">Save your work</h2>
@@ -83,7 +89,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
     <label for="cb">Colour cards by</label><select id="cb" disabled><option value="">Import a CSV first</option></select>
     <p class="hint">Select a card to edit it. New people are added underneath the selected person. Deleting a person also removes everyone who reports to them.</p>
   </aside>
-  <div class="canvas"><div class="tree" id="tree"></div></div>
+  <div class="canvas" id="cv"><div id="sz"><div class="tree" id="tree"></div></div></div>
 </main>
 <script>
 var nid=1,sel=1,zoom=1;
@@ -98,32 +104,35 @@ nid=100;
 function find(n,id,par){if(n.id===id)return{n:n,p:par};for(var i=0;i<n.kids.length;i++){var r=find(n.kids[i],id,n);if(r)return r}return null}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function html(n){
-  var c=n.kids.length?'<i>'+n.kids.length+'</i>':'';
+  var c=n.kids.length?'<span class="tg" data-t="'+n.id+'" title="'+(n.c?'Show':'Hide')+' reports">'+(n.c?'+'+(sz(n)-1):'\u2212')+'</span>':'';
   return '<li><div class="card'+(n.id===sel?' sel':'')+(n.vac?' vac':'')+'" tabindex="0" role="button" data-id="'+n.id+'" style="--c:'+colorOf(n.team)+'"><b>'+esc(n.name||"Unnamed")+'</b><span>'+esc(n.title||"No title")+'</span>'+c+'</div>'+
-    (n.kids.length?'<ul>'+n.kids.map(html).join("")+'</ul>':'')+'</li>';
+    (n.kids.length&&!n.c?'<ul>'+n.kids.map(html).join("")+'</ul>':'')+'</li>';
 }
 var gm={};
 function colorOf(g){return g&&(g in gm)?"var(--g"+(gm[g]%10)+")":"var(--gn)"}
 function draw(){
   var k=0;gm={};(function w(n){if(n.team&&!(n.team in gm))gm[n.team]=k++;n.kids.forEach(w)})(root);
   document.getElementById("gl").innerHTML=Object.keys(gm).map(function(g){return '<option value="'+esc(g)+'">'}).join("");
-  document.getElementById("tree").innerHTML='<ul>'+html(root)+'</ul>';}
+  document.getElementById("tree").innerHTML='<ul>'+html(root)+'</ul>';sizer();}
 function load(){
   var r=find(root,sel);if(!r){sel=root.id;r=find(root,sel)}
-  nm.value=r.n.name;tt.value=r.n.title;dp.value=r.n.team||"";vc.checked=!!r.n.vac;
+  nm.value=r.n.name;tt.value=r.n.title;dp.value=r.n.team||"";vc.checked=!!r.n.vac;tgb.textContent=r.n.c?"Expand reports":"Collapse reports";tgb.disabled=!r.n.kids.length;
   del.disabled=(r.n===root);
 }
 function pick(id){sel=id;draw();load()}
-var nm=document.getElementById("nm"),tt=document.getElementById("tt"),dp=document.getElementById("dp"),vc=document.getElementById("vc"),del=document.getElementById("del");
-document.getElementById("tree").addEventListener("click",function(e){var c=e.target.closest(".card");if(c)pick(+c.dataset.id)});
+var nm=document.getElementById("nm"),tt=document.getElementById("tt"),dp=document.getElementById("dp"),vc=document.getElementById("vc"),tgb=document.getElementById("tgb"),lv=document.getElementById("lv"),del=document.getElementById("del");
+document.getElementById("tree").addEventListener("click",function(e){var g=e.target.closest(".tg");if(g){toggle(+g.dataset.t);return}var c=e.target.closest(".card");if(c)pick(+c.dataset.id)});
 document.getElementById("tree").addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){var c=e.target.closest(".card");if(c){e.preventDefault();pick(+c.dataset.id)}}});
 function edit(){var r=find(root,sel);r.n.name=nm.value;r.n.title=tt.value;r.n.team=dp.value.trim();r.n.vac=vc.checked;draw();persist()}
 nm.oninput=tt.oninput=dp.oninput=vc.onchange=edit;
 document.getElementById("add").onclick=function(){
-  var r=find(root,sel),p=P("New person","Job title",r.n.team);r.n.kids.push(p);sel=p.id;draw();load();persist();nm.focus();nm.select();
+  var r=find(root,sel),p=P("New person","Job title",r.n.team);r.n.c=false;r.n.kids.push(p);sel=p.id;draw();load();persist();nm.focus();nm.select();
 };
 del.onclick=function(){var r=find(root,sel);if(!r.p)return;r.p.kids=r.p.kids.filter(function(k){return k!==r.n});sel=r.p.id;draw();load();persist()};
-function z(d){zoom=Math.min(1.5,Math.max(.4,Math.round((zoom+d)*10)/10));document.getElementById("tree").style.transform="scale("+zoom+")";document.getElementById("zl").textContent=Math.round(zoom*100)+"%"}
+function sizer(){var t=document.getElementById("tree"),w=document.getElementById("sz");t.style.transform="scale("+zoom+")";w.style.width=Math.ceil(t.offsetWidth*zoom)+"px";w.style.height=Math.ceil(t.offsetHeight*zoom)+"px"}
+function setZoom(v){if(!isFinite(v))v=1;zoom=Math.min(1.5,Math.max(.2,Math.round(v*100)/100));document.getElementById("zl").textContent=Math.round(zoom*100)+"%";sizer()}
+function z(d){setZoom(zoom+d)}
+function fit(){var c=document.getElementById("cv"),t=document.getElementById("tree");setZoom(Math.floor(Math.min(1,(c.clientWidth-48)/t.offsetWidth,(c.clientHeight-64)/t.offsetHeight)*100)/100)}
 document.getElementById("zi").onclick=function(){z(.1)};document.getElementById("zo").onclick=function(){z(-.1)};
 var cols=[],cb="",cbsel=document.getElementById("cb"),msg=document.getElementById("msg");
 var ALIAS={
@@ -196,8 +205,8 @@ cbsel.onchange=function(){cb=cbsel.value;(function w(n){n.team=cb&&n.x?(n.x[cb]|
 function doImport(text){
   var res=buildFromCSV(text);
   if(res.error){msg.textContent=res.error;return}
-  adopt({root:res.root,cols:res.cols,cb:res.cb});draw();load();persist();
-  msg.textContent="Imported "+res.seen+" "+(res.seen===1?"person":"people")+"."+(res.notes.length?" "+res.notes.join(" "):"")}
+  adopt({root:res.root,cols:res.cols,cb:res.cb});setLevels(2);lv.value="2";draw();load();persist();fit();
+  msg.textContent="Imported "+res.seen+" "+(res.seen===1?"person":"people")+"."+(res.notes.length?" "+res.notes.join(" "):"")+" Showing the top 2 levels: use the Levels menu or the + badges to open more."}
 document.getElementById("imp").onclick=function(){doImport(document.getElementById("csv").value)};
 document.getElementById("file").onchange=function(e){var f=e.target.files[0];if(!f)return;
   if(/\.xlsx?$/i.test(f.name)){msg.textContent="That is an Excel file. In Excel choose File, Save As, then CSV UTF-8, and choose the CSV instead.";e.target.value="";return}
@@ -216,7 +225,7 @@ var KEY="orgchart:v1",smsg=document.getElementById("smsg");
 function clean(n,d){
   if(!n||typeof n!=="object"||d>200)return null;
   var t=typeof n.team==="number"?(SG[n.team]||""):String(n.team||"").slice(0,80),
-  o={id:nid++,name:String(n.name||"").slice(0,120),title:String(n.title||"").slice(0,120),team:t,vac:!!n.vac,kids:[]};
+  o={id:nid++,name:String(n.name||"").slice(0,120),title:String(n.title||"").slice(0,120),team:t,vac:!!n.vac,c:!!n.c,kids:[]};
   if(n.x&&typeof n.x==="object"){o.x={};Object.keys(n.x).slice(0,40).forEach(function(k){o.x[k.slice(0,80)]=String(n.x[k]).slice(0,120)})}
   if(Array.isArray(n.kids))n.kids.slice(0,5000).forEach(function(k){var c=clean(k,d+1);if(c)o.kids.push(c)});
   return o}
@@ -242,14 +251,22 @@ document.getElementById("jf").onchange=function(e){
   r.onload=function(){
     try{var data=JSON.parse(r.result);
       if(!adopt(data)){smsg.textContent="That file is not a saved chart from this app.";return}
-      draw();load();persist();smsg.textContent="Chart opened and saved in this browser."}
+      lv.value="-1";draw();load();persist();fit();smsg.textContent="Chart opened and saved in this browser."}
     catch(err){smsg.textContent="That file could not be read. Choose a .json file saved with Save as file."}
     e.target.value=""};
   r.readAsText(f)};
 document.getElementById("nw").onclick=function(){
   if(!confirm("Replace the current chart with a blank one? Save it as a file first if you want to keep it."))return;
   nid=1;root={id:nid++,name:"New person",title:"Job title",team:"",kids:[]};sel=root.id;cols=[];cb="";refreshCB();draw();load();persist();nm.focus();nm.select()};
-draw();load();
+function setLevels(L){(function w(n,d){n.c=L>0&&d>=L-1&&n.kids.length>0;n.kids.forEach(function(k){w(k,d+1)})})(root,0)}
+function visible(n,id){if(n.id===id)return true;if(n.c)return false;return n.kids.some(function(k){return visible(k,id)})}
+function toggle(id){var r=find(root,id);if(!r||!r.n.kids.length)return;
+  r.n.c=!r.n.c;if(r.n.c&&find(r.n,sel))sel=id;lv.value="-1";draw();load();persist()}
+tgb.onclick=function(){toggle(sel)};
+lv.onchange=function(){if(lv.value==="-1")return;setLevels(+lv.value);if(!visible(root,sel))sel=root.id;draw();load();persist();fit()};
+document.getElementById("ft").onclick=fit;
+document.getElementById("pr").onclick=function(){window.print()};
+draw();load();fit();
 </script>
 </body>
 </html>
