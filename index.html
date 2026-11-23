@@ -6,7 +6,7 @@
 <title>Org chart builder</title>
 <style>
 :root{--bg:#f3f5f8;--panel:#fff;--ink:#14213d;--mute:#5d6b82;--line:#a9b4c6;--bd:#d9dfe9;--sel:#14213d;
---d1:#2a7f8e;--d2:#c2542d;--d3:#5b55b8;--d4:#4f8a3c;--d5:#8a8f9c;
+--g0:#2a7f8e;--g1:#c2542d;--g2:#5b55b8;--g3:#4f8a3c;--g4:#b8860b;--g5:#c0397a;--g6:#3d7bd6;--g7:#8e5a2b;--g8:#1f9d75;--g9:#7a4fa0;--gn:#8a8f9c;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1624;--panel:#18223a;--ink:#e8edf7;--mute:#98a5bd;--line:#4a5876;--bd:#2c3855;--sel:#e8edf7}}
 :root[data-theme="dark"]{--bg:#0f1624;--panel:#18223a;--ink:#e8edf7;--mute:#98a5bd;--line:#4a5876;--bd:#2c3855;--sel:#e8edf7}
@@ -42,7 +42,9 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .tree li:only-child{padding-top:24px}
 .tree ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:1px solid var(--line);height:24px}
 .tree>ul>li:only-child{padding-top:0}
-.card{display:inline-block;min-width:150px;max-width:190px;text-align:left;background:var(--panel);border:1px solid var(--bd);border-top:4px solid var(--c,var(--d5));border-radius:8px;padding:9px 12px;cursor:pointer;position:relative}
+.card{display:inline-block;min-width:150px;max-width:190px;text-align:left;background:var(--panel);border:1px solid var(--bd);border-top:4px solid var(--c,var(--gn));border-radius:8px;padding:9px 12px;cursor:pointer;position:relative}
+.card.vac{border-style:dashed;border-top-style:solid;background:transparent}
+.card.vac b{font-style:italic;font-weight:500}
 .card.sel{outline:2px solid var(--sel);outline-offset:2px}
 .card b{display:block;font-weight:600}
 .card span{display:block;color:var(--mute);font-size:12px}
@@ -62,10 +64,9 @@ button:disabled{opacity:.4;cursor:not-allowed}
     <h2 id="ph">Selected person</h2>
     <label for="nm">Name</label><input id="nm" autocomplete="off">
     <label for="tt">Job title</label><input id="tt" autocomplete="off">
-    <label for="dp">Team</label>
-    <select id="dp">
-      <option value="1">Leadership</option><option value="2">Product</option><option value="3">Engineering</option><option value="4">Operations</option><option value="5">Other</option>
-    </select>
+    <label for="dp">Group (sets the card colour)</label>
+    <input id="dp" list="gl" autocomplete="off"><datalist id="gl"></datalist>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px"><input type="checkbox" id="vc" style="width:auto"> Vacant position</label>
     <div class="row">
       <button class="primary" id="add">Add report</button>
       <button class="danger" id="del">Delete</button>
@@ -78,14 +79,16 @@ button:disabled{opacity:.4;cursor:not-allowed}
     <label for="file">Choose a CSV file</label><input type="file" id="file" accept=".csv,text/csv">
     <label for="csv">Or paste CSV</label><textarea id="csv" rows="5" placeholder="id,name,title,team,manager_id"></textarea>
     <div class="row"><button id="imp">Import CSV</button><button id="exp">Download CSV</button></div>
-    <p class="hint" id="msg">Columns: id, name, title, team, manager_id. Leave manager_id empty for the top person. Importing replaces the current chart.</p>
+    <p class="hint" id="msg">Columns: id, name, title, team, manager_id. Leave manager_id empty for the top person. Names like Employee, Job Title, Department and Reports To also work, and the manager can be a name instead of an id. Importing replaces the current chart.</p>
+    <label for="cb">Colour cards by</label><select id="cb" disabled><option value="">Import a CSV first</option></select>
     <p class="hint">Select a card to edit it. New people are added underneath the selected person. Deleting a person also removes everyone who reports to them.</p>
   </aside>
   <div class="canvas"><div class="tree" id="tree"></div></div>
 </main>
 <script>
 var nid=1,sel=1,zoom=1;
-function P(n,t,d,k){return {id:nid++,name:n,title:t,team:d,kids:k||[]}}
+var SG=["","Leadership","Product","Engineering","Operations"];
+function P(n,t,d,k){return {id:nid++,name:n,title:t,team:SG[d]||d||"",kids:k||[]}}
 var root=P("Amara Okafor","Chief Executive",1,[
   P("Lena Fischer","Head of Product",2,[P("Tom Reyes","Product Designer",2),P("Priya Nair","Product Manager",2)]),
   P("Dan Whitfield","Head of Engineering",3,[P("Sofia Marin","Backend Lead",3),P("Kai Tanaka","Frontend Lead",3)]),
@@ -96,60 +99,109 @@ function find(n,id,par){if(n.id===id)return{n:n,p:par};for(var i=0;i<n.kids.leng
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function html(n){
   var c=n.kids.length?'<i>'+n.kids.length+'</i>':'';
-  return '<li><div class="card'+(n.id===sel?' sel':'')+'" tabindex="0" role="button" data-id="'+n.id+'" style="--c:var(--d'+n.team+')"><b>'+esc(n.name||"Unnamed")+'</b><span>'+esc(n.title||"No title")+'</span>'+c+'</div>'+
+  return '<li><div class="card'+(n.id===sel?' sel':'')+(n.vac?' vac':'')+'" tabindex="0" role="button" data-id="'+n.id+'" style="--c:'+colorOf(n.team)+'"><b>'+esc(n.name||"Unnamed")+'</b><span>'+esc(n.title||"No title")+'</span>'+c+'</div>'+
     (n.kids.length?'<ul>'+n.kids.map(html).join("")+'</ul>':'')+'</li>';
 }
-function draw(){document.getElementById("tree").innerHTML='<ul>'+html(root)+'</ul>';}
+var gm={};
+function colorOf(g){return g&&(g in gm)?"var(--g"+(gm[g]%10)+")":"var(--gn)"}
+function draw(){
+  var k=0;gm={};(function w(n){if(n.team&&!(n.team in gm))gm[n.team]=k++;n.kids.forEach(w)})(root);
+  document.getElementById("gl").innerHTML=Object.keys(gm).map(function(g){return '<option value="'+esc(g)+'">'}).join("");
+  document.getElementById("tree").innerHTML='<ul>'+html(root)+'</ul>';}
 function load(){
   var r=find(root,sel);if(!r){sel=root.id;r=find(root,sel)}
-  nm.value=r.n.name;tt.value=r.n.title;dp.value=r.n.team;
+  nm.value=r.n.name;tt.value=r.n.title;dp.value=r.n.team||"";vc.checked=!!r.n.vac;
   del.disabled=(r.n===root);
 }
 function pick(id){sel=id;draw();load()}
-var nm=document.getElementById("nm"),tt=document.getElementById("tt"),dp=document.getElementById("dp"),del=document.getElementById("del");
+var nm=document.getElementById("nm"),tt=document.getElementById("tt"),dp=document.getElementById("dp"),vc=document.getElementById("vc"),del=document.getElementById("del");
 document.getElementById("tree").addEventListener("click",function(e){var c=e.target.closest(".card");if(c)pick(+c.dataset.id)});
 document.getElementById("tree").addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){var c=e.target.closest(".card");if(c){e.preventDefault();pick(+c.dataset.id)}}});
-function edit(){var r=find(root,sel);r.n.name=nm.value;r.n.title=tt.value;r.n.team=+dp.value;draw();persist()}
-nm.oninput=tt.oninput=dp.onchange=edit;
+function edit(){var r=find(root,sel);r.n.name=nm.value;r.n.title=tt.value;r.n.team=dp.value.trim();r.n.vac=vc.checked;draw();persist()}
+nm.oninput=tt.oninput=dp.oninput=vc.onchange=edit;
 document.getElementById("add").onclick=function(){
   var r=find(root,sel),p=P("New person","Job title",r.n.team);r.n.kids.push(p);sel=p.id;draw();load();persist();nm.focus();nm.select();
 };
 del.onclick=function(){var r=find(root,sel);if(!r.p)return;r.p.kids=r.p.kids.filter(function(k){return k!==r.n});sel=r.p.id;draw();load();persist()};
 function z(d){zoom=Math.min(1.5,Math.max(.4,Math.round((zoom+d)*10)/10));document.getElementById("tree").style.transform="scale("+zoom+")";document.getElementById("zl").textContent=Math.round(zoom*100)+"%"}
 document.getElementById("zi").onclick=function(){z(.1)};document.getElementById("zo").onclick=function(){z(-.1)};
-var TEAMS={leadership:1,product:2,engineering:3,operations:4},TN=["","Leadership","Product","Engineering","Operations","Other"];
-var msg=document.getElementById("msg");
-function parseCSV(t){var rows=[],r=[],f="",q=false,i,c;t=t.replace(/^\uFEFF/,"");
+var cols=[],cb="",cbsel=document.getElementById("cb"),msg=document.getElementById("msg");
+var ALIAS={
+  id:["id","employee id","employeeid","emp id","staff id","person id","key"],
+  name:["name","full name","fullname","employee name","employee","person","staff"],
+  title:["title","job title","jobtitle","role","position"],
+  mgr:["reports to id","manager id","managerid","supervisor id","parent id","reports to","reportsto","manager","supervisor","line manager","parent","manager name"],
+  vac:["position status","status"]};
+function norm(x){return String(x).toLowerCase().replace(/[_\-]+/g," ").replace(/\s+/g," ").trim()}
+function detectSep(t){var l=t.replace(/^\uFEFF/,"").split(/\r?\n/)[0]||"",best=",",n=0;
+  [",",";","\t","|"].forEach(function(c){var k=l.split(c).length;if(k>n){n=k;best=c}});return best}
+function parseCSV(t,sep){var rows=[],r=[],f="",q=false,i,c;t=t.replace(/^\uFEFF/,"");
   for(i=0;i<t.length;i++){c=t[i];
     if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
     else if(c==='"')q=true;
-    else if(c===","){r.push(f);f=""}
+    else if(c===sep){r.push(f);f=""}
     else if(c==="\n"||c==="\r"){if(c==="\r"&&t[i+1]==="\n")i++;r.push(f);f="";rows.push(r);r=[]}
     else f+=c}
   if(f||r.length){r.push(f);rows.push(r)}
   return rows.filter(function(x){return x.some(function(y){return y.trim()})})}
+function sz(x){var c=1;x.kids.forEach(function(k){c+=sz(k)});return c}
+function buildFromCSV(text){
+  if(/^(PK|\xD0\xCF)/.test(text))return{error:"That looks like an Excel workbook, not a CSV. In Excel choose File, Save As, then CSV UTF-8, and import that file instead."};
+  var rows=parseCSV(text,detectSep(text));
+  if(rows.length<2)return{error:"No data found. The file needs a header row and at least one person."};
+  if(rows.length>5001)return{error:"That file has more than 5,000 people, which is more than this page can draw."};
+  var h=rows[0].map(norm),ix={},shown=rows[0].map(function(x){return x.trim()}).join(", ");
+  Object.keys(ALIAS).forEach(function(k){ix[k]=-1;for(var j=0;j<ALIAS[k].length&&ix[k]<0;j++)ix[k]=h.indexOf(ALIAS[k][j])});
+  if(ix.name<0&&ix.id<0)return{error:"I could not find a name column. The headers in your file are: "+shown+". Rename the column that holds people's names to name."};
+  if(ix.mgr<0)return{error:"I could not find a manager column. The headers in your file are: "+shown+". Rename the column that says who each person reports to as manager_id."};
+  function cell(r,i){return i<0?"":(r[i]||"").trim()}
+  var used={};["id","name","title","mgr"].forEach(function(k){if(ix[k]>=0)used[ix[k]]=1});
+  var cl=[];rows[0].forEach(function(x,j){if(!used[j]&&x.trim()&&rows.slice(1).some(function(r){return cell(r,j)}))cl.push({j:j,n:x.trim()})});
+  var cbCol="";["family","department","dept","team","function","group","division"].some(function(a){var c=cl.filter(function(c){return norm(c.n)===a})[0];if(c){cbCol=c.n;return true}});
+  var list=[],byId={},byName={},i,r,n,k,st;
+  for(i=1;i<rows.length;i++){r=rows[i];
+    n={key:cell(r,ix.id),name:cell(r,ix.name),title:cell(r,ix.title),mgr:cell(r,ix.mgr),kids:[],parent:null,x:{}};
+    if(!n.name)n.name=n.key;
+    if(!n.name)continue;
+    if(!n.key)n.key=n.name;
+    cl.forEach(function(c){var v=cell(r,c.j);if(v)n.x[c.n]=v.slice(0,120)});
+    n.team=cbCol?(n.x[cbCol]||""):"";
+    st=cell(r,ix.vac).toLowerCase();n.vac=/^vacan/.test(st)||n.name.toLowerCase()==="vacancy";
+    k=n.key.toLowerCase();
+    if(byId[k])return{error:"The id \""+n.key+"\" appears more than once (row "+(i+1)+"). Each person needs a unique id."};
+    byId[k]=n;k=n.name.toLowerCase();byName[k]=byName[k]===undefined?n:false;list.push(n)}
+  if(!list.length)return{error:"No people found. Check that the name column has values."};
+  var lost=0;
+  list.forEach(function(x){var m=x.mgr.toLowerCase(),p=m?(byId[m]||byName[m]):null;
+    if(m&&!p)lost++;
+    if(p&&p!==x){x.parent=p;p.kids.push(x)}});
+  var roots=list.filter(function(x){return !x.parent}),top,notes=[],synth=false;
+  if(!roots.length)return{error:"Every person has a manager, so there is no one at the top. Leave manager_id empty for the most senior person."};
+  if(roots.length===1)top=roots[0];
+  else{
+    var sizes=roots.map(sz),tot=sizes.reduce(function(a,b){return a+b},0),bi=sizes.indexOf(Math.max.apply(null,sizes));
+    var others=roots.filter(function(_,j){return j!==bi});
+    var names=others.slice(0,6).map(function(o){return o.name}).join(", ")+(others.length>6?" and "+(others.length-6)+" more":"");
+    if(sizes[bi]>=0.8*tot){top=roots[bi];others.forEach(function(o){top.kids.push(o)});
+      notes.push(names+(others.length===1?" has":" have")+" no manager (or "+(others.length===1?"lists themselves":"list themselves")+" as their own manager), so I placed "+(others.length===1?"them":"them")+" under "+top.name+". If that is wrong, correct the manager in your file and import again.")}
+    else{synth=true;top={name:"Organisation",title:"",team:"",x:{},kids:roots};notes.push(roots.length+" people have no manager, so I placed them under a new top box called Organisation. Rename or delete it as you like.")}}
+  if(lost)notes.push(lost+" named a manager who is not in the file or whose name matches several people, so they sit at the top level.");
+  var seen=sz(top)-(synth?1:0);
+  if(seen<list.length)notes.push((list.length-seen)+" were left out because their reporting lines loop back on themselves.");
+  return{root:top,seen:seen,total:list.length,notes:notes,cols:cl.map(function(c){return c.n}),cb:cbCol}}
+function refreshCB(){
+  cbsel.innerHTML=cols.length?'<option value="">No colours</option>'+cols.map(function(c){return '<option>'+esc(c)+'</option>'}).join(""):'<option value="">Import a CSV first</option>';
+  cbsel.disabled=!cols.length;cbsel.value=cb}
+cbsel.onchange=function(){cb=cbsel.value;(function w(n){n.team=cb&&n.x?(n.x[cb]||""):"";n.kids.forEach(w)})(root);draw();load();persist()};
 function doImport(text){
-  var rows=parseCSV(text);
-  if(rows.length<2){msg.textContent="No data found. Include a header row and at least one person.";return}
-  var h=rows[0].map(function(x){return x.trim().toLowerCase()}),ix={};
-  ["id","name","title","team","manager_id"].forEach(function(k){ix[k]=h.indexOf(k)});
-  if(ix.id<0||ix.name<0||ix.manager_id<0){msg.textContent="The header row needs at least id, name and manager_id columns.";return}
-  var map={},list=[],i,row,n;
-  for(i=1;i<rows.length;i++){row=rows[i];
-    n={id:0,key:(row[ix.id]||"").trim(),name:(row[ix.name]||"").trim(),title:ix.title<0?"":(row[ix.title]||"").trim(),mgr:(row[ix.manager_id]||"").trim(),kids:[]};
-    var tm=ix.team<0?"":(row[ix.team]||"").trim().toLowerCase();n.team=TEAMS[tm]||5;
-    if(map[n.key]){msg.textContent="Duplicate id "+n.key+" on row "+(i+1)+". Each id must be unique.";return}
-    map[n.key]=n;list.push(n)}
-  var roots=list.filter(function(x){return !x.mgr||!map[x.mgr]});
-  if(roots.length!==1){msg.textContent=roots.length?"Found "+roots.length+" people with no valid manager. Exactly one person should be at the top.":"Every person has a manager, so there is no top of the chart.";return}
-  list.forEach(function(x){if(map[x.mgr]&&x!==roots[0])map[x.mgr].kids.push(x)});
-  nid=1;var seen=0;
-  (function fix(x){x.id=nid++;seen++;x.kids.forEach(fix)})(roots[0]);
-  root=roots[0];sel=root.id;draw();load();persist();
-  msg.textContent="Imported "+seen+" of "+list.length+" people."+(seen<list.length?" "+(list.length-seen)+" were skipped because their reporting lines loop back on themselves.":"");
-}
+  var res=buildFromCSV(text);
+  if(res.error){msg.textContent=res.error;return}
+  adopt({root:res.root,cols:res.cols,cb:res.cb});draw();load();persist();
+  msg.textContent="Imported "+res.seen+" "+(res.seen===1?"person":"people")+"."+(res.notes.length?" "+res.notes.join(" "):"")}
 document.getElementById("imp").onclick=function(){doImport(document.getElementById("csv").value)};
-document.getElementById("file").onchange=function(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){document.getElementById("csv").value=r.result;doImport(r.result)};r.readAsText(f)};
+document.getElementById("file").onchange=function(e){var f=e.target.files[0];if(!f)return;
+  if(/\.xlsx?$/i.test(f.name)){msg.textContent="That is an Excel file. In Excel choose File, Save As, then CSV UTF-8, and choose the CSV instead.";e.target.value="";return}
+  var r=new FileReader();r.onload=function(){document.getElementById("csv").value=r.result;doImport(r.result);e.target.value=""};r.readAsText(f)};
 function q(s){s=String(s);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
 document.getElementById("exp").onclick=async function(){
   var out=["id,name,title,team,manager_id"],k=1;
@@ -162,16 +214,20 @@ document.getElementById("exp").onclick=async function(){
 };
 var KEY="orgchart:v1",smsg=document.getElementById("smsg");
 function clean(n,d){
-  if(!n||typeof n!=="object"||d>50)return null;
-  var t=+n.team,o={id:nid++,name:String(n.name||"").slice(0,120),title:String(n.title||"").slice(0,120),team:(t>=1&&t<=5)?t:5,kids:[]};
-  if(Array.isArray(n.kids))n.kids.slice(0,500).forEach(function(k){var c=clean(k,d+1);if(c)o.kids.push(c)});
+  if(!n||typeof n!=="object"||d>200)return null;
+  var t=typeof n.team==="number"?(SG[n.team]||""):String(n.team||"").slice(0,80),
+  o={id:nid++,name:String(n.name||"").slice(0,120),title:String(n.title||"").slice(0,120),team:t,vac:!!n.vac,kids:[]};
+  if(n.x&&typeof n.x==="object"){o.x={};Object.keys(n.x).slice(0,40).forEach(function(k){o.x[k.slice(0,80)]=String(n.x[k]).slice(0,120)})}
+  if(Array.isArray(n.kids))n.kids.slice(0,5000).forEach(function(k){var c=clean(k,d+1);if(c)o.kids.push(c)});
   return o}
 function adopt(data){
   nid=1;var r=clean(data&&data.root,0);
   if(!r)return false;
-  root=r;sel=root.id;return true}
+  root=r;sel=root.id;
+  cols=Array.isArray(data.cols)?data.cols.map(function(c){return String(c).slice(0,80)}).slice(0,40):[];
+  cb=typeof data.cb==="string"?data.cb:"";refreshCB();return true}
 function persist(){
-  try{localStorage.setItem(KEY,JSON.stringify({root:root}));smsg.textContent="Changes are saved automatically in this browser."}
+  try{localStorage.setItem(KEY,JSON.stringify({root:root,cols:cols,cb:cb}));smsg.textContent="Changes are saved automatically in this browser."}
   catch(e){smsg.textContent="This browser is blocking auto-save. Use Save as file to keep your work."}}
 try{var stored=localStorage.getItem(KEY);if(stored)adopt(JSON.parse(stored))}catch(e){}
 function dl(name,text,type){
@@ -179,7 +235,7 @@ function dl(name,text,type){
   a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
   setTimeout(function(){URL.revokeObjectURL(u)},1000)}
 document.getElementById("sv").onclick=function(){
-  try{dl("org-chart.json",JSON.stringify({app:"org-chart-builder",version:1,root:root},null,2),"application/json");smsg.textContent="File downloaded. Use Open to load it on any device."}
+  try{dl("org-chart.json",JSON.stringify({app:"org-chart-builder",version:2,root:root,cols:cols,cb:cb},null,2),"application/json");smsg.textContent="File downloaded. Use Open to load it on any device."}
   catch(e){smsg.textContent="Could not start the download in this browser."}};
 document.getElementById("jf").onchange=function(e){
   var f=e.target.files[0];if(!f)return;var r=new FileReader();
@@ -192,7 +248,7 @@ document.getElementById("jf").onchange=function(e){
   r.readAsText(f)};
 document.getElementById("nw").onclick=function(){
   if(!confirm("Replace the current chart with a blank one? Save it as a file first if you want to keep it."))return;
-  nid=1;root={id:nid++,name:"New person",title:"Job title",team:1,kids:[]};sel=root.id;draw();load();persist();nm.focus();nm.select()};
+  nid=1;root={id:nid++,name:"New person",title:"Job title",team:"",kids:[]};sel=root.id;cols=[];cb="";refreshCB();draw();load();persist();nm.focus();nm.select()};
 draw();load();
 </script>
 </body>
